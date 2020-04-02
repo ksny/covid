@@ -36,5 +36,5 @@ for (i in seq(nrow(Data))) {
   }
 }
 
-p <- ggplot(Data,aes(x=day,y=change)) + geom_line(aes(color=state))
+p <- ggplot(Data,aes(x=day,y=log((cases),10))) + geom_line(aes(color=state))
 print(p)
