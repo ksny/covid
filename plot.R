@@ -16,6 +16,7 @@ Counties$day <- as.Date(today) - as.Date(Counties$date)
 # NY <- States[which(States$state=='New York'),]
 MD <- States[which(States$state=='Maryland'),]
 NJ <- States[which(States$state=='New Jersey'),]
+CA <- States[which(States$state=='California'),]
 
 NY <- Counties[which((Counties$county=='New York City')&(Counties$state=='New York')),]
 NY <- NY[,-3]
@@ -25,18 +26,20 @@ Montgomery <- Counties[which((Counties$county=='Montgomery')&(Counties$state=='M
 Montgomery <- Montgomery[,-3]
 colnames(Montgomery)[2] <- 'state'
 
-Data <- rbind(NY,NJ,MD,Montgomery)
+Data <- rbind(NY,NJ,CA,MD,Montgomery)
 
-NYpop <- 8.623*10^6
-NJpop <- 8.909*10^6
-MDpop <- 6.043*10^6
-montPop <- 1.059*10^6
+NYpop <- 8.623
+NJpop <- 8.909
+CApop <- 39.560
+MDpop <- 6.043
+montPop <- 1.059
 
 NYratio <- NYpop/montPop
 NJratio <- NJpop/montPop
 MDratio <- NYpop/montPop
+CAratio  <- CApop/montPop
 
-caseThreshold <- 50
+caseThreshold <- 20
 
 Data$percentChange <- Data$cases
 Data$cumPercentChange <- Data$cases
@@ -61,6 +64,8 @@ for (i in seq(nrow(Data))) {
       Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/MDratio
     } else if (State=='New Jersey') {
       Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/NJratio
+    } else if (State=='California') {
+      Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/CAratio
     }
     thresholdDay <- max(Data$day[which((Data$state==State)&(Data$casesScaled>=caseThreshold))])
     print(State)
@@ -75,8 +80,9 @@ for (i in seq(nrow(Data))) {
 # p <- ggplot(Data,aes(x=syncDay,y=cumPercentChange)) + geom_line(aes(color=state))
 # p <- ggplot(Data,aes(x=syncDay,y=change)) + geom_line(aes(color=state))
 # p <- ggplot(Data,aes(x=syncDay,y=log(change,10))) + geom_line(aes(color=state))
-p <- ggplot(Data,aes(x=syncDay,y=casesScaled)) + geom_line(aes(color=state))
-# p <- ggplot(Data,aes(x=syncDay,y=log(casesScaled,10))) + geom_line(aes(color=state))
+# p <- ggplot(Data,aes(x=syncDay,y=casesScaled)) + geom_line(aes(color=state))
+p <- ggplot(Data,aes(x=syncDay,y=log(casesScaled,10))) + geom_line(aes(color=state),size=1) +
+  theme_classic()
 
 print(p)
 
