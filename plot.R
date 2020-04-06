@@ -39,13 +39,14 @@ NJratio <- NJpop/montPop
 MDratio <- NYpop/montPop
 CAratio  <- CApop/montPop
 
-caseThreshold <- 20
+caseThreshold <- 1
 
 Data$percentChange <- Data$cases
 Data$cumPercentChange <- Data$cases
 Data$change <- Data$cases
 Data$syncDay <- Data$day
 Data$casesScaled <- Data$cases
+Data$changeScaled <- Data$cases
 for (i in seq(nrow(Data))) {
   State <- Data$state[i]
   stateIndex <- which(Data$state==State)
@@ -54,10 +55,12 @@ for (i in seq(nrow(Data))) {
     Data$percentChange[i] <- (Data$cases[i]-Data$cases[i-1])/Data$cases[i-1]*100
     Data$cumPercentChange[i] <- Data$cumPercentChange[i-1] + Data$percentChange[i]
     Data$change[i] <- Data$cases[i] - Data$cases[i-1]
+    Data$changeScaled[i] <- Data$casesScaled[i] - Data$casesScaled[i-1]
   } else {
     Data$percentChange[i] <- 0
     Data$cumPercentChange[i] <- 0
     Data$change[i] <- 0
+    Data$changeScaled[i] <- 0
     if (State=='New York City') {
       Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/NYratio
     } else if (State=='Maryland') {
@@ -74,14 +77,21 @@ for (i in seq(nrow(Data))) {
   Data$syncDay[i] <- Data$syncDay[i]-thresholdDay
 }
 
-# p <- ggplot(Data,aes(x=syncDay,y=log(cases,10))) + geom_line(aes(color=state))
-# p <- ggplot(Data,aes(x=syncDay,y=cases)) + geom_line(aes(color=state))
-# p <- ggplot(Data,aes(x=syncDay,y=percentChange)) + geom_line(aes(color=state))
-# p <- ggplot(Data,aes(x=syncDay,y=cumPercentChange)) + geom_line(aes(color=state))
-# p <- ggplot(Data,aes(x=syncDay,y=change)) + geom_line(aes(color=state))
-# p <- ggplot(Data,aes(x=syncDay,y=log(change,10))) + geom_line(aes(color=state))
-# p <- ggplot(Data,aes(x=syncDay,y=casesScaled)) + geom_line(aes(color=state))
-p <- ggplot(Data,aes(x=syncDay,y=log(casesScaled,10))) + geom_line(aes(color=state),size=1) +
+# Flip axis and remove negative days
+removeIndex <- which(Data$syncDay>0)
+Data <- Data[-removeIndex,]
+Data$syncDay <- -1*Data$syncDay
+
+# p <- ggplot(Data,aes(x=syncDay,y=log(cases,10))) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=cases)) + geom_line(aes(color=state),size=1) +
+p <- ggplot(Data,aes(x=day,y=percentChange)) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=cumPercentChange)) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=change)) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=log(change,10))) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=changeScaled)) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=log(changeScaled,10))) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=casesScaled)) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=log(casesScaled,10))) + geom_line(aes(color=state),size=1) +
   theme_classic()
 
 print(p)
