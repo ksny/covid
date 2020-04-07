@@ -3,8 +3,6 @@ rm(list=ls())
 library(ggplot2)
 library(lubridate)
 
-# setwd('~/Documents/Corona/covid-19-data')
-
 States <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-states.csv',stringsAsFactors = F)
 Counties <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-counties.csv',stringsAsFactors = F)
 
@@ -39,7 +37,7 @@ NJratio <- NJpop/montPop
 MDratio <- NYpop/montPop
 CAratio  <- CApop/montPop
 
-caseThreshold <- 1
+caseThreshold <- 50
 
 Data$percentChange <- Data$cases
 Data$cumPercentChange <- Data$cases
@@ -47,6 +45,7 @@ Data$change <- Data$cases
 Data$syncDay <- Data$day
 Data$casesScaled <- Data$cases
 Data$changeScaled <- Data$cases
+Data$deathsScaled <- Data$deaths
 for (i in seq(nrow(Data))) {
   State <- Data$state[i]
   stateIndex <- which(Data$state==State)
@@ -63,16 +62,20 @@ for (i in seq(nrow(Data))) {
     Data$changeScaled[i] <- 0
     if (State=='New York City') {
       Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/NYratio
+      Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/NYratio
     } else if (State=='Maryland') {
       Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/MDratio
+      Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/MDratio
     } else if (State=='New Jersey') {
       Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/NJratio
+      Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/NJratio
     } else if (State=='California') {
       Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/CAratio
+      Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/CAratio
     }
     thresholdDay <- max(Data$day[which((Data$state==State)&(Data$casesScaled>=caseThreshold))])
-    print(State)
-    print(thresholdDay)
+    # print(State)
+    # print(thresholdDay)
   }
   Data$syncDay[i] <- Data$syncDay[i]-thresholdDay
 }
@@ -82,16 +85,29 @@ removeIndex <- which(Data$syncDay>0)
 Data <- Data[-removeIndex,]
 Data$syncDay <- -1*Data$syncDay
 
+# Right-align syncDay
+maxSyncDay <- max(Data$syncDay)
+for (State in unique(Data$state)) {
+  index <- which(Data$state==State)
+  maxStateSyncDay <- max(Data$syncDay[index])
+  adjustment <- maxSyncDay - maxStateSyncDay
+  Data$syncDay[index] <- Data$syncDay[index] + adjustment
+}
+
 # p <- ggplot(Data,aes(x=syncDay,y=log(cases,10))) + geom_line(aes(color=state),size=1) +
 # p <- ggplot(Data,aes(x=syncDay,y=cases)) + geom_line(aes(color=state),size=1) +
-p <- ggplot(Data,aes(x=day,y=percentChange)) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=deaths)) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=log(deaths,10))) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=percentChange)) + geom_line(aes(color=state),size=1) +
 # p <- ggplot(Data,aes(x=syncDay,y=cumPercentChange)) + geom_line(aes(color=state),size=1) +
 # p <- ggplot(Data,aes(x=syncDay,y=change)) + geom_line(aes(color=state),size=1) +
 # p <- ggplot(Data,aes(x=syncDay,y=log(change,10))) + geom_line(aes(color=state),size=1) +
 # p <- ggplot(Data,aes(x=syncDay,y=changeScaled)) + geom_line(aes(color=state),size=1) +
 # p <- ggplot(Data,aes(x=syncDay,y=log(changeScaled,10))) + geom_line(aes(color=state),size=1) +
-# p <- ggplot(Data,aes(x=syncDay,y=casesScaled)) + geom_line(aes(color=state),size=1) +
+p <- ggplot(Data,aes(x=syncDay,y=casesScaled)) + geom_line(aes(color=state),size=1) +
 # p <- ggplot(Data,aes(x=syncDay,y=log(casesScaled,10))) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=deathsScaled)) + geom_line(aes(color=state),size=1) +
+# p <- ggplot(Data,aes(x=syncDay,y=log(deathsScaled,10))) + geom_line(aes(color=state),size=1) +
   theme_classic()
 
 print(p)
