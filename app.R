@@ -2,6 +2,8 @@ library(shiny)
 library(ggplot2)
 library(lubridate)
 
+setwd('~/Documents/Corona/covid')
+
 '%ni%' <- Negate('%in%')
 
 local <- T
@@ -17,10 +19,10 @@ if (local==F) {
   countyData <- readRDS('countyData.rds')
 }
 
-today <- max(as.Date(States$date))
+today <- max(as.Date(stateData$date))
 
-States$day <- as.Date(today)-as.Date(States$date)
-Counties$day <- as.Date(today) - as.Date(Counties$date)
+stateData$day <- as.Date(today)-as.Date(stateData$date)
+countyData$day <- as.Date(today) - as.Date(countyData$date)
 
 States <- sort(unique(stateData$state))
 Counties <- sort(unique(paste0(countyData$county,' (',countyData$state,')')))
@@ -39,9 +41,21 @@ ui <- fluidPage(
     sidebarPanel(
       selectizeInput('states','Select States of Interest:',States,selected=presetStates,multiple=T),
       selectizeInput('counties','Select Counties of Interest:',Counties,selected=presetCounties,multiple=T),
-      uiOutput('popRef'),
       checkboxInput('useCaseThreshold','Sync Days by Case Theshold?',value=F),
-      numericInput('caseThreshold','Case Threshold:',value=50)
+      numericInput('caseThreshold','Case Threshold:',value=50),
+      checkboxInput('rightAlign','Match Days on Right?',value=F),
+      selectInput('statistic','Select Statistic to Plot:',
+                  list('Cases'='cases','Deaths'='deaths','Change in Cases'='change','Percent Change in Cases'='percentChange'),
+                  ),
+      checkboxInput('logScale','Log Scale?',value=F),
+      conditionalPanel(
+        condition='input.statistic!="percentChange"',
+        checkboxInput('scaled','Scale by Population Size?',value=F),
+        conditionalPanel(
+          condition='input.scaled==true',
+          uiOutput('popRef')
+        )
+      )
     ),
     
     mainPanel(
@@ -99,9 +113,9 @@ server <- function(input,output,session) {
     
     countyIndex <- NULL
     for (county in input$counties) {
-      state <- unlist(strsplit(county,'('))[2]
-      state <- unlist(strsplit(state,')'))[1]
-      county <- unlist(strsplit(county,'('))[1]
+      state <- unlist(strsplit(county,'(',fixed=T))[2]
+      state <- unlist(strsplit(state,')',fixed=T))[1]
+      county <- unlist(strsplit(county,'(',fixed=T))[1]
       index <- ((which(countyData$state==state))&(which(countyData$county==county)))
       countyIndex <- c(countyIndex,index)
     }
@@ -135,29 +149,92 @@ server <- function(input,output,session) {
         Data$cumPercentChange[i] <- 0
         Data$change[i] <- 0
         Data$changeScaled[i] <- 0
+        Data$day[stateIndex] <- Data$day[stateIndex] - maxDay
         scaleFactor <- populationData$Population[popIndex]/populationData$Population[popRefIndex]
         if (values$popFlag==T) {
           Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/scaleFactor
           Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/scaleFactor
         }
-        thresholdDay <- max(Data$day[which((Data$state==State)&(Data$casesScaled>=caseThreshold))])
+        if (input$useCaseThreshold==T) {
+          thresholdDay <- max(Data$day[which((Data$state==State)&(Data$casesScaled>=input$caseThreshold))])
+        }
       }
-      Data$syncDay[i] <- Data$syncDay[i]-thresholdDay
+      if (input$useCaseThreshold==T) {
+        Data$syncDay[i] <- Data$syncDay[i]-thresholdDay
+      }
     }
 
     # Flip axis and remove negative days
-    removeIndex <- which(Data$syncDay>0)
-    Data <- Data[-removeIndex,]
-    Data$syncDay <- -1*Data$syncDay
+    if (input$useCaseThreshold==T) {
+      removeIndex <- which(Data$syncDay>0)
+      Data <- Data[-removeIndex,]
+      Data$syncDay <- -1*Data$syncDay
+    }
+    Data$day <- -1*Data$day
 
     # Right-align syncDay
-    maxSyncDay <- max(Data$syncDay)
-    for (State in unique(Data$state)) {
-      index <- which(Data$state==State)
-      maxStateSyncDay <- max(Data$syncDay[index])
-      adjustment <- maxSyncDay - maxStateSyncDay
-      Data$syncDay[index] <- Data$syncDay[index] + adjustment
+    if (input$rightAlign==T) {
+      if (input$useCaseThreshold==T) {
+        maxSyncDay <- max(Data$syncDay)
+        for (State in unique(Data$state)) {
+          index <- which(Data$state==State)
+          maxStateSyncDay <- max(Data$syncDay[index])
+          adjustment <- maxSyncDay - maxStateSyncDay
+          Data$syncDay[index] <- Data$syncDay[index] + adjustment
+        }
+      } else {
+        maxDay <- max(Data$day)
+        for (State in unique(Data$state)) {
+          index <- which(Data$state==State)
+          maxStateDay <- max(Data$day[index])
+          adjustment <- maxDay - maxStateDay
+          Data$day[index] <- Data$day[index] + adjustment
+        }
+      }
     }
+    
+    return(Data)
+  })
+  
+  output$plot <- renderPlot({
+    Data <- getData()
+    print(Data)
+    
+    if (input$useCaseThreshold==T) {
+      X <- 'syncDay'
+    } else {
+      X <- 'day'
+    }
+    
+    if (input$scaled==T) {
+      Y <- paste0(inputstatistic,'Scaled')
+    } else {
+      Y <- input$statistic
+    }
+    
+    if (input$logScale==T) {
+      p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10)))
+    } else {
+      p <- ggplot(Data,aes(x=get(X),y=get(Y)))
+    }
+    p <-  p + geom_line(aes(color=state),size=1) + theme_classic()
+    
+    # p <- ggplot(Data,aes(x=syncDay,y=log(cases,10))) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=cases)) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=deaths)) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=log(deaths,10))) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=percentChange)) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=cumPercentChange)) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=change)) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=log(change,10))) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=changeScaled)) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=log(changeScaled,10))) + geom_line(aes(color=state),size=1) +
+    # p <- ggplot(Data,aes(x=syncDay,y=casesScaled)) + geom_line(aes(color=state),size=1) +
+      # p <- ggplot(Data,aes(x=syncDay,y=log(casesScaled,10))) + geom_line(aes(color=state),size=1) +
+      # p <- ggplot(Data,aes(x=syncDay,y=deathsScaled)) + geom_line(aes(color=state),size=1) +
+      # p <- ggplot(Data,aes(x=syncDay,y=log(deathsScaled,10))) + geom_line(aes(color=state),size=1) +
+
+    print(p)
   })
   
 }
