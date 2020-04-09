@@ -3,7 +3,7 @@ library(ggplot2)
 library(lubridate)
 
 # setwd('~/Documents/Corona/covid')
-setwd('~/Corona/covid')
+# setwd('~/Corona/covid')
 
 # Access Shiny App from:
 # https://imperfect-gold-standard.shinyapps.io/covid/
