@@ -3,10 +3,14 @@ library(ggplot2)
 library(lubridate)
 
 # setwd('~/Documents/Corona/covid')
+setwd('~/Corona/covid')
+
+# Access Shiny App from:
+# https://imperfect-gold-standard.shinyapps.io/covid/
 
 '%ni%' <- Negate('%in%')
 
-local <- T
+local <- F
 
 if (local==F) {
   stateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-states.csv',stringsAsFactors = F)
@@ -39,6 +43,9 @@ values$state <- NULL
 values$popFlag <- T
 values$populationData <- populationData
 values$popEdit <- NULL
+# values$stateData <- stateData
+# values$countyData <- countyData
+
 
 ui <- fluidPage(
   
@@ -57,20 +64,20 @@ ui <- fluidPage(
       checkboxInput('rightAlign','Match Days on Right?',value=F),
       selectInput('statistic','Select Statistic to Plot:',statistics,selected = statistics[1]),
       checkboxInput('logScale','Log Scale?',value=F),
-      # conditionalPanel(
-      # condition='input.statistic!="percentChange"',
-        uiOutput('scaled'),
-        # checkboxInput('scaled','Scale by Population Size?',value=F),
+      uiOutput('scaled'),
+      conditionalPanel(
+        condition='input.scaled=="Yes"',
+        uiOutput('popRef'),
+        checkboxInput('editPop','Edit Reference State Population?',value=F),
         conditionalPanel(
-          condition='input.scaled=="Yes"',
-          uiOutput('popRef'),
-          checkboxInput('editPop','Edit Reference State Population?',value=F),
-          conditionalPanel(
-            condition='input.editPop==true',
-            uiOutput('popEdit')
-          )
+          condition='input.editPop==true',
+          uiOutput('popEdit')
         )
-      # )
+      ),
+      hr(),
+      h4('Last Updated:'),
+      uiOutput('latestDate')
+      # actionButton('newData','Get Latest Data'),br()
     ),
     
     mainPanel(
@@ -81,6 +88,23 @@ ui <- fluidPage(
 )
 
 server <- function(input,output,session) {
+  
+  # observeEvent(input$newData,{
+  #   stateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-states.csv',stringsAsFactors = F)
+  #   countyData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-counties.csv',stringsAsFactors = F)
+  #   
+  #   saveRDS(stateData,'stateData.rds')
+  #   saveRDS(countyData,'countyData.rds')
+  #   
+  #   values$stateData <- stateData
+  #   values$countyData <- countyData
+  # })
+  
+  output$latestDate <- renderUI({
+    Data <- getData()
+    maxDate <- max(Data$date)
+    h5(as.character(maxDate))
+  })
   
   output$scaled <- renderUI({
     if (input$statistic!='percentChange') {
