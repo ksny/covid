@@ -34,6 +34,12 @@ populationData <- readRDS('populationData.rds')
 
 statistics <- list('Cases'='cases','Deaths'='deaths','Change in Cases'='change','Percent Change in Cases'='percentChange')
 
+values <- reactiveValues()
+values$state <- NULL
+values$popFlag <- T
+values$populationData <- populationData
+values$popEdit <- NULL
+
 ui <- fluidPage(
   
   titlePanel('Corona Virus Tracker'),
@@ -49,30 +55,40 @@ ui <- fluidPage(
         numericInput('caseThreshold','Case Threshold:',value=50)
       ),
       checkboxInput('rightAlign','Match Days on Right?',value=F),
-      selectInput('statistic','Select Statistic to Plot:',statistics),
+      selectInput('statistic','Select Statistic to Plot:',statistics,selected = statistics[1]),
       checkboxInput('logScale','Log Scale?',value=F),
-      conditionalPanel(
-        condition='input.statistic!="percentChange"',
-        checkboxInput('scaled','Scale by Population Size?',value=F),
+      # conditionalPanel(
+      # condition='input.statistic!="percentChange"',
+        uiOutput('scaled'),
+        # checkboxInput('scaled','Scale by Population Size?',value=F),
         conditionalPanel(
-          condition='input.scaled==true',
-          uiOutput('popRef')
+          condition='input.scaled=="Yes"',
+          uiOutput('popRef'),
+          checkboxInput('editPop','Edit Reference State Population?',value=F),
+          conditionalPanel(
+            condition='input.editPop==true',
+            uiOutput('popEdit')
+          )
         )
-      )
+      # )
     ),
     
     mainPanel(
-      plotOutput('plot')
+      plotOutput('plot',height = '600px')
     )
   )
   
 )
 
-values <- reactiveValues()
-values$state <- NULL
-values$popFlag <- T
-
 server <- function(input,output,session) {
+  
+  output$scaled <- renderUI({
+    if (input$statistic!='percentChange') {
+      if (values$popFlag==T) {
+        selectInput('scaled','Scale by Population Size?',c('No','Yes'))
+      }
+    }
+  })
   
   output$popRef <- renderUI({
     if (values$popFlag==T) {
@@ -81,10 +97,35 @@ server <- function(input,output,session) {
     }
   })
   
+  output$popEdit <- renderUI({
+    if (values$popFlag==T) {
+      index <- which(values$populationData$State==input$popRef)
+      indexValue <- as.numeric(values$populationData$Population)[index]
+      numericInput('popEdit','Edit Reference State Population:',value=indexValue)
+    }
+  })
+  
+  observeEvent(input$popRef,{
+    index <- which(values$populationData$State==input$popRef)
+    values$popEdit <- as.numeric(values$populationData$Population)[index]
+    updateNumericInput(session,'popEdit',value=values$popEdit)
+  })
+  
+  observe({
+    req(input$popEdit)
+    if (values$popFlag==T) {
+      if (input$editPop==T) {
+        index <- which(values$populationData$State==input$popRef)
+        values$popEdit <- as.numeric(input$popEdit)
+        values$populationData$Population[index] <- values$popEdit
+      }
+    }
+  })
+  
   observe({
     stateList <- c(input$states,input$counties)
     for (state in stateList) {
-      if (state %ni% populationData$State) {
+      if (state %ni% values$populationData$State) {
         values$state <- state
         showModal(modalDialog(
           numericInput('statePop',paste0('Enter Population Size of ',state,':'),value=NULL),
@@ -95,19 +136,44 @@ server <- function(input,output,session) {
   })
   
   observeEvent(input$enter,{
-    if (!is.null(input$statePop)) {
+    if (!is.na(input$statePop)) {
       State <- values$state
       Population <- input$statePop
       newRow <- cbind(State,Population)
       populationData <- rbind(populationData,newRow)
-    } else {
-      values$popFlag <- F
+      saveRDS(populationData,'populationData.rds')
+      values$populationData <- populationData
     }
     removeModal()
   })
   
+  observe({
+    values$popFlag <- T
+    input$states
+    input$counties
+    isolate(Data <- getData())
+    States <- unique(Data$state)
+    for (State in States) {
+      if (State %ni% values$populationData$State) {
+        values$popFlag <- F
+      }
+    }
+  })
+  
+  observeEvent(input$scaled,{
+    selection <- input$statistic
+    if (input$scaled=='Yes') {
+      # if (selection=='percentChange') {
+      #   selection <- 'change'
+      # }
+      updateSelectInput(session,'statistic',choices=statistics[1:3],selected=selection)
+    } else {
+      updateSelectInput(session,'statistic',choices=statistics[1:4],selected=selection)
+    }
+  })
+  
   getData <- reactive({
-    
+    req(input$scaled)
     stateIndex <- NULL
     for (state in input$states) {
       index <- which(stateData$state==state)
@@ -140,8 +206,8 @@ server <- function(input,output,session) {
       State <- Data$state[i]
       stateIndex <- which(Data$state==State)
       if (values$popFlag==T) {
-        popIndex <- which(populationData$State==State)
-        popRefIndex <- which(populationData$State==input$popRef)
+        popIndex <- which(values$populationData$State==State)
+        popRefIndex <- which(values$populationData$State==input$popRef)
       }
       maxDay <- max(Data$day[which(Data$state==State)])
       if (Data$day[i] < maxDay) {
@@ -157,21 +223,18 @@ server <- function(input,output,session) {
         Data$change[i] <- 0
         Data$changeScaled[i] <- 0
         Data$day[stateIndex] <- Data$day[stateIndex] - maxDay
-        if ((values$popFlag==T)&(input$scaled==T)) {
-          scaleFactor <- populationData$Population[popIndex]/populationData$Population[popRefIndex]
+        if ((values$popFlag==T)&(input$scaled=='Yes')) {
+          scaleFactor <- as.numeric(values$populationData$Population[popIndex])/as.numeric(values$populationData$Population[popRefIndex])
           Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/scaleFactor
           Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/scaleFactor
         }
         if (input$useCaseThreshold==T) {
-          if (input$scaled==T) {
+          if (input$scaled=='Yes') {
             thresholdDay <- max(Data$day[which((Data$state==State)&(Data$casesScaled>=input$caseThreshold))])
           } else {
             thresholdDay <- max(Data$day[which((Data$state==State)&(Data$cases>=input$caseThreshold))])
           }
-        }
-        if (input$useCaseThreshold==T) {
-          #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-          Data$syncDay[stateIndex] <- Data$syncDay[stateIndex]-thresholdDay
+          Data$syncDay[stateIndex] <- Data$day[stateIndex]-thresholdDay
         }
       }
     }
@@ -209,8 +272,13 @@ server <- function(input,output,session) {
   })
   
   output$plot <- renderPlot({
+    # req(input$states)
+    # req(input$counties)
+    # req(input$useCaseThreshold)
+    # req(input$rightAlign)
+    # req(input$statistic)
+    # req(input$scaled)
     Data <- getData()
-    # print(Data)
     
     if (input$useCaseThreshold==T) {
       X <- 'syncDay'
@@ -220,7 +288,7 @@ server <- function(input,output,session) {
       xLabel <- 'Days Since First Reported Case'
     }
     
-    if (input$scaled==T) {
+    if (input$scaled=='Yes') {
       Y <- paste0(input$statistic,'Scaled')
       yLabel <- paste0(names(statistics)[which(statistics==input$statistic)],' (Scaled with Respect to ',input$popRef,')')
       xLabel <- paste0(xLabel,' (Scaled with Respect to ',input$popRef,')')
@@ -235,8 +303,8 @@ server <- function(input,output,session) {
     } else {
       p <- ggplot(Data,aes(x=get(X),y=get(Y)))
     }
-    p <-  p + geom_line(aes(color=state),size=1) + theme_classic() +
-      labs(title='',x=xLabel,y=yLabel)
+    p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state)) +
+      theme_classic(base_size = 14) + labs(title='',x=xLabel,y=yLabel)
     
     # p <- ggplot(Data,aes(x=syncDay,y=log(cases,10))) + geom_line(aes(color=state),size=1) +
     # p <- ggplot(Data,aes(x=syncDay,y=cases)) + geom_line(aes(color=state),size=1) +
