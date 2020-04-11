@@ -1,6 +1,7 @@
 library(shiny)
 library(ggplot2)
 library(lubridate)
+library(plotly)
 
 # setwd('~/Documents/Corona/covid')
 # setwd('~/Corona/covid')
@@ -46,14 +47,13 @@ values$popEdit <- NULL
 # values$stateData <- stateData
 # values$countyData <- countyData
 
-
 ui <- fluidPage(
   
   titlePanel('Corona Virus Tracker'),
   
   sidebarLayout(
     
-    sidebarPanel(
+    sidebarPanel(width = 3,
       selectizeInput('states','Select States of Interest:',States,selected=presetStates,multiple=T),
       selectizeInput('counties','Select Counties of Interest:',Counties,selected=presetCounties,multiple=T),
       checkboxInput('useCaseThreshold','Sync Days by Case Theshold?',value=F),
@@ -68,7 +68,7 @@ ui <- fluidPage(
       conditionalPanel(
         condition='input.scaled=="Yes"',
         uiOutput('popRef'),
-        checkboxInput('editPop','Edit Reference State Population?',value=F),
+        checkboxInput('editPop','Edit Reference State/County Population?',value=F),
         conditionalPanel(
           condition='input.editPop==true',
           uiOutput('popEdit')
@@ -81,7 +81,7 @@ ui <- fluidPage(
     ),
     
     mainPanel(
-      plotOutput('plot',height = '600px')
+      plotlyOutput('plot',height = '600px')
     )
   )
   
@@ -164,7 +164,7 @@ server <- function(input,output,session) {
       State <- values$state
       Population <- input$statePop
       newRow <- cbind(State,Population)
-      populationData <- rbind(populationData,newRow)
+      populationData <- rbind(values$populationData,newRow)
       saveRDS(populationData,'populationData.rds')
       values$populationData <- populationData
     }
@@ -295,7 +295,7 @@ server <- function(input,output,session) {
     return(Data)
   })
   
-  output$plot <- renderPlot({
+  output$plot <- renderPlotly({
     # req(input$states)
     # req(input$counties)
     # req(input$useCaseThreshold)
@@ -323,29 +323,15 @@ server <- function(input,output,session) {
     
     if (input$logScale==T) {
       yLabel <- paste0('Log Scaled ',yLabel)
-      p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10)))
+      p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10),label=state))
     } else {
-      p <- ggplot(Data,aes(x=get(X),y=get(Y)))
+      p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
     }
     p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state)) +
-      theme_classic(base_size = 14) + labs(title='',x=xLabel,y=yLabel)
-    
-    # p <- ggplot(Data,aes(x=syncDay,y=log(cases,10))) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=cases)) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=deaths)) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=log(deaths,10))) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=percentChange)) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=cumPercentChange)) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=change)) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=log(change,10))) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=changeScaled)) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=log(changeScaled,10))) + geom_line(aes(color=state),size=1) +
-    # p <- ggplot(Data,aes(x=syncDay,y=casesScaled)) + geom_line(aes(color=state),size=1) +
-      # p <- ggplot(Data,aes(x=syncDay,y=log(casesScaled,10))) + geom_line(aes(color=state),size=1) +
-      # p <- ggplot(Data,aes(x=syncDay,y=deathsScaled)) + geom_line(aes(color=state),size=1) +
-      # p <- ggplot(Data,aes(x=syncDay,y=log(deathsScaled,10))) + geom_line(aes(color=state),size=1) +
-
-    print(p)
+      theme_classic(base_size = 14) + theme(legend.position='top',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
+    p <- ggplotly(p=p,tooltip = 'label') %>%
+      layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
+    p
   })
   
 }
