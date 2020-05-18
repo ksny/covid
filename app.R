@@ -11,7 +11,7 @@ library(plotly)
 
 '%ni%' <- Negate('%in%')
 
-local <- T
+local <- F
 
 if (local==F) {
   stateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-states.csv',stringsAsFactors = F)
