@@ -63,6 +63,10 @@ ui <- fluidPage(
       ),
       checkboxInput('rightAlign','Match Days on Right?',value=F),
       selectInput('statistic','Select Statistic to Plot:',statistics,selected = statistics[1]),
+      conditionalPanel(
+        condition='input.statistic=="change"',
+        numericInput('lag','Number of Days for Running Average:',value=1,step=1)
+      ),
       checkboxInput('logScale','Log Scale?',value=F),
       uiOutput('scaled'),
       conditionalPanel(
@@ -234,18 +238,26 @@ server <- function(input,output,session) {
         popRefIndex <- which(values$populationData$State==input$popRef)
       }
       maxDay <- max(Data$day[which(Data$state==State)])
+      maxDayChange <- max(Data$day[which(Data$state==State)])-input$lag+1
       if (Data$day[i] < maxDay) {
         Data$percentChange[i] <- (Data$cases[i]-Data$cases[i-1])/Data$cases[i-1]*100
         Data$cumPercentChange[i] <- Data$cumPercentChange[i-1] + Data$percentChange[i]
-        Data$change[i] <- Data$cases[i] - Data$cases[i-1]
-        if (values$popFlag==T) {
-          Data$changeScaled[i] <- Data$casesScaled[i] - Data$casesScaled[i-1]
+        if (Data$day[i] < maxDayChange) {
+          Data$change[i] <- mean(Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])
+          if (values$popFlag==T) {
+            Data$changeScaled[i] <- mean(Data$casesScaled[(i-input$lag+1):i] - Data$casesScaled[(i-input$lag):(i-1)])
+          }
+        } else {
+          Data$change[i] <- NA
+          if (values$popFlag==T) {
+            Data$changeScaled[i] <- NA
+          }
         }
       } else {
-        Data$percentChange[i] <- 0
-        Data$cumPercentChange[i] <- 0
-        Data$change[i] <- 0
-        Data$changeScaled[i] <- 0
+        Data$percentChange[i] <- NA
+        Data$cumPercentChange[i] <- NA
+        Data$change[i] <- NA
+        Data$changeScaled[i] <- NA
         Data$day[stateIndex] <- Data$day[stateIndex] - maxDay
         if ((values$popFlag==T)&(input$scaled=='Yes')) {
           scaleFactor <- as.numeric(values$populationData$Population[popIndex])/as.numeric(values$populationData$Population[popRefIndex])
