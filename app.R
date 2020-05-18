@@ -11,7 +11,7 @@ library(plotly)
 
 '%ni%' <- Negate('%in%')
 
-local <- F
+local <- T
 
 if (local==F) {
   stateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-states.csv',stringsAsFactors = F)
@@ -32,18 +32,37 @@ countyData$day <- as.Date(today) - as.Date(countyData$date)
 States <- sort(unique(stateData$state))
 Counties <- sort(unique(paste0(countyData$county,' (',countyData$state,')')))
 
-presetStates <- c('Maryland','New Jersey','Florida','Texas')
-presetCounties <- c('Montgomery (Maryland)','New York City (New York)')
+presetStates <- c('')
+presetCounties <- c('')
 
 populationData <- readRDS('populationData.rds')
 
 statistics <- list('Cases'='cases','Deaths'='deaths','Change in Cases'='change','Percent Change in Cases'='percentChange')
+
+presets <- list('DC Metro Area'=list('States'=c('District of Columbia'),
+                                     'Counties'=c('Montgomery (Maryland)',
+                                                  'Baltimore (Maryland)',
+                                                  'Baltimore city (Maryland)',
+                                                  "Prince George's (Maryland)",
+                                                  'Frederick (Maryland)',
+                                                  'Howard (Maryland)',
+                                                  'Anne Arundel (Maryland)',
+                                                  'Arlington (Virginia)',
+                                                  'Fairfax (Virginia)',
+                                                  'Loudoun (Virginia)',
+                                                  'Prince William (Virginia)')),
+                'Family States'=list('States'=c('New Jersey','Maryland','Texas','Pennsylvania'),
+                                     'Counties'=''),
+                'All States'=list('States'=States,
+                                  'Counties'=''))
+
 
 values <- reactiveValues()
 values$state <- NULL
 values$popFlag <- T
 values$populationData <- populationData
 values$popEdit <- NULL
+values$scaled <- 'No'
 # values$stateData <- stateData
 # values$countyData <- countyData
 
@@ -54,34 +73,39 @@ ui <- fluidPage(
   sidebarLayout(
     
     sidebarPanel(width = 3,
-      selectizeInput('states','Select States of Interest:',States,selected=presetStates,multiple=T),
-      selectizeInput('counties','Select Counties of Interest:',Counties,selected=presetCounties,multiple=T),
-      checkboxInput('useCaseThreshold','Sync Days by Case Theshold?',value=F),
-      conditionalPanel(
-        condition='input.useCaseThreshold==true',
-        numericInput('caseThreshold','Case Threshold:',value=50)
-      ),
-      checkboxInput('rightAlign','Match Days on Right?',value=F),
-      selectInput('statistic','Select Statistic to Plot:',statistics,selected = statistics[1]),
-      conditionalPanel(
-        condition='input.statistic=="change"',
-        numericInput('lag','Number of Days for Running Average:',value=1,step=1)
-      ),
-      checkboxInput('logScale','Log Scale?',value=F),
-      uiOutput('scaled'),
-      conditionalPanel(
-        condition='input.scaled=="Yes"',
-        uiOutput('popRef'),
-        checkboxInput('editPop','Edit Reference State/County Population?',value=F),
-        conditionalPanel(
-          condition='input.editPop==true',
-          uiOutput('popEdit')
-        )
-      ),
-      hr(),
-      h4('Last Updated:'),
-      uiOutput('latestDate')
-      # actionButton('newData','Get Latest Data'),br()
+                 checkboxInput('usePresets','Use Preset State/County Selections?',value=F),
+                 conditionalPanel(
+                   condition='input.usePresets==true',
+                   selectInput('presetSelection','Preset State/County Selections:',names(presets)),
+                   actionButton('presetGo','Use Selected Preset'),br(),br()
+                 ),
+                 selectizeInput('states','Select States of Interest:',States,selected=presetStates,multiple=T),
+                 selectizeInput('counties','Select Counties of Interest:',Counties,selected=presetCounties,multiple=T),
+                 checkboxInput('useCaseThreshold','Sync Days by Case Theshold?',value=F),
+                 conditionalPanel(
+                   condition='input.useCaseThreshold==true',
+                   numericInput('caseThreshold','Case Threshold:',value=50)
+                 ),
+                 checkboxInput('rightAlign','Match Days on Right?',value=F),
+                 selectInput('statistic','Select Statistic to Plot:',statistics,selected = statistics[1]),
+                 conditionalPanel(
+                   condition='input.statistic=="change"',
+                   numericInput('lag','Number of Days for Running Average:',value=7,step=1)
+                 ),
+                 checkboxInput('logScale','Log Scale?',value=F),
+                 uiOutput('scaled'),
+                 conditionalPanel(
+                   condition='input.scaled=="Yes"',
+                   uiOutput('popRef'),
+                   checkboxInput('editPop','Edit Reference State/County Population?',value=F),
+                   conditionalPanel(
+                     condition='input.editPop==true',
+                     uiOutput('popEdit')
+                   )
+                 ),
+                 hr(),
+                 h4('Last Updated:'),
+                 h5(today)
     ),
     
     mainPanel(
@@ -93,29 +117,24 @@ ui <- fluidPage(
 
 server <- function(input,output,session) {
   
-  # observeEvent(input$newData,{
-  #   stateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-states.csv',stringsAsFactors = F)
-  #   countyData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-counties.csv',stringsAsFactors = F)
-  #   
-  #   saveRDS(stateData,'stateData.rds')
-  #   saveRDS(countyData,'countyData.rds')
-  #   
-  #   values$stateData <- stateData
-  #   values$countyData <- countyData
-  # })
-  
-  output$latestDate <- renderUI({
-    Data <- getData()
-    maxDate <- max(Data$date)
-    h5(as.character(maxDate))
+  observeEvent(input$presetGo,{
+    selection <- presets[[which(names(presets)==input$presetSelection)]]
+    states <- selection$States
+    counties <- selection$Counties
+    updateSelectizeInput(session,'states',selected = states)
+    updateSelectizeInput(session,'counties',selected = counties)
   })
   
   output$scaled <- renderUI({
     if (input$statistic!='percentChange') {
       if (values$popFlag==T) {
-        selectInput('scaled','Scale by Population Size?',c('No','Yes'))
+        selectInput('scaled','Scale by Population Size?',c('No','Yes'),selected=values$scaled)
       }
     }
+  })
+  
+  observe({
+    values$scaled <- input$scaled
   })
   
   output$popRef <- renderUI({
@@ -191,9 +210,6 @@ server <- function(input,output,session) {
   observeEvent(input$scaled,{
     selection <- input$statistic
     if (input$scaled=='Yes') {
-      # if (selection=='percentChange') {
-      #   selection <- 'change'
-      # }
       updateSelectInput(session,'statistic',choices=statistics[1:3],selected=selection)
     } else {
       updateSelectInput(session,'statistic',choices=statistics[1:4],selected=selection)
@@ -202,104 +218,108 @@ server <- function(input,output,session) {
   
   getData <- reactive({
     req(input$scaled)
-    stateIndex <- NULL
-    for (state in input$states) {
-      index <- which(stateData$state==state)
-      stateIndex <- c(stateIndex,index)
-    }
-    
-    countyIndex <- NULL
-    for (county in input$counties) {
-      state <- unlist(strsplit(county,' (',fixed=T))[2]
-      state <- unlist(strsplit(state,')',fixed=T))[1]
-      County <- unlist(strsplit(county,' (',fixed=T))[1]
-      countyStateIndex <- which(countyData$state==state)
-      countyCountyIndex <- which(countyData$county==County)
-      index <- intersect(countyStateIndex,countyCountyIndex)
-      countyData$county[index] <- county
-      countyIndex <- c(countyIndex,index)
-    }
-    colnames(countyData)[2] <- 'state'
-    countyData <- countyData[,-3]
-    Data <- rbind(stateData[stateIndex,],countyData[countyIndex,])
-    
-    Data$percentChange <- Data$cases
-    Data$cumPercentChange <- Data$cases
-    Data$change <- Data$cases
-    Data$syncDay <- Data$day
-    Data$casesScaled <- Data$cases
-    Data$changeScaled <- Data$cases
-    Data$deathsScaled <- Data$deaths
-    for (i in seq(nrow(Data))) {
-      State <- Data$state[i]
-      stateIndex <- which(Data$state==State)
-      if (values$popFlag==T) {
-        popIndex <- which(values$populationData$State==State)
-        popRefIndex <- which(values$populationData$State==input$popRef)
+    if (((is.null(input$states))&(is.null(input$counties)))) {
+      Data <- NULL
+    } else {
+      stateIndex <- NULL
+      for (state in input$states) {
+        index <- which(stateData$state==state)
+        stateIndex <- c(stateIndex,index)
       }
-      maxDay <- max(Data$day[which(Data$state==State)])
-      maxDayChange <- max(Data$day[which(Data$state==State)])-input$lag+1
-      if (Data$day[i] < maxDay) {
-        Data$percentChange[i] <- (Data$cases[i]-Data$cases[i-1])/Data$cases[i-1]*100
-        Data$cumPercentChange[i] <- Data$cumPercentChange[i-1] + Data$percentChange[i]
-        if (Data$day[i] < maxDayChange) {
-          Data$change[i] <- mean(Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])
-          if (values$popFlag==T) {
-            Data$changeScaled[i] <- mean(Data$casesScaled[(i-input$lag+1):i] - Data$casesScaled[(i-input$lag):(i-1)])
+      
+      countyIndex <- NULL
+      for (county in input$counties) {
+        state <- unlist(strsplit(county,' (',fixed=T))[2]
+        state <- unlist(strsplit(state,')',fixed=T))[1]
+        County <- unlist(strsplit(county,' (',fixed=T))[1]
+        countyStateIndex <- which(countyData$state==state)
+        countyCountyIndex <- which(countyData$county==County)
+        index <- intersect(countyStateIndex,countyCountyIndex)
+        countyData$county[index] <- county
+        countyIndex <- c(countyIndex,index)
+      }
+      colnames(countyData)[2] <- 'state'
+      countyData <- countyData[,-3]
+      Data <- rbind(stateData[stateIndex,],countyData[countyIndex,])
+      
+      Data$percentChange <- Data$cases
+      Data$cumPercentChange <- Data$cases
+      Data$change <- Data$cases
+      Data$syncDay <- Data$day
+      Data$casesScaled <- Data$cases
+      Data$changeScaled <- Data$cases
+      Data$deathsScaled <- Data$deaths
+      for (i in seq(nrow(Data))) {
+        State <- Data$state[i]
+        stateIndex <- which(Data$state==State)
+        if (values$popFlag==T) {
+          popIndex <- which(values$populationData$State==State)
+          popRefIndex <- which(values$populationData$State==input$popRef)
+        }
+        maxDay <- max(Data$day[which(Data$state==State)])
+        maxDayChange <- max(Data$day[which(Data$state==State)])-input$lag+1
+        if (Data$day[i] < maxDay) {
+          Data$percentChange[i] <- (Data$cases[i]-Data$cases[i-1])/Data$cases[i-1]*100
+          Data$cumPercentChange[i] <- Data$cumPercentChange[i-1] + Data$percentChange[i]
+          if (Data$day[i] < maxDayChange) {
+            Data$change[i] <- mean(Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])
+            if (values$popFlag==T) {
+              Data$changeScaled[i] <- mean(Data$casesScaled[(i-input$lag+1):i] - Data$casesScaled[(i-input$lag):(i-1)])
+            }
+          } else {
+            Data$change[i] <- NA
+            if (values$popFlag==T) {
+              Data$changeScaled[i] <- NA
+            }
           }
         } else {
+          Data$percentChange[i] <- NA
+          Data$cumPercentChange[i] <- NA
           Data$change[i] <- NA
-          if (values$popFlag==T) {
-            Data$changeScaled[i] <- NA
+          Data$changeScaled[i] <- NA
+          Data$day[stateIndex] <- Data$day[stateIndex] - maxDay
+          if ((values$popFlag==T)&(input$scaled=='Yes')) {
+            scaleFactor <- as.numeric(values$populationData$Population[popIndex])/as.numeric(values$populationData$Population[popRefIndex])
+            Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/scaleFactor
+            Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/scaleFactor
           }
-        }
-      } else {
-        Data$percentChange[i] <- NA
-        Data$cumPercentChange[i] <- NA
-        Data$change[i] <- NA
-        Data$changeScaled[i] <- NA
-        Data$day[stateIndex] <- Data$day[stateIndex] - maxDay
-        if ((values$popFlag==T)&(input$scaled=='Yes')) {
-          scaleFactor <- as.numeric(values$populationData$Population[popIndex])/as.numeric(values$populationData$Population[popRefIndex])
-          Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/scaleFactor
-          Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/scaleFactor
-        }
-        if (input$useCaseThreshold==T) {
-          if (input$scaled=='Yes') {
-            thresholdDay <- max(Data$day[which((Data$state==State)&(Data$casesScaled>=input$caseThreshold))])
-          } else {
-            thresholdDay <- max(Data$day[which((Data$state==State)&(Data$cases>=input$caseThreshold))])
+          if (input$useCaseThreshold==T) {
+            if (input$scaled=='Yes') {
+              thresholdDay <- max(Data$day[which((Data$state==State)&(Data$casesScaled>=input$caseThreshold))])
+            } else {
+              thresholdDay <- max(Data$day[which((Data$state==State)&(Data$cases>=input$caseThreshold))])
+            }
+            Data$syncDay[stateIndex] <- Data$day[stateIndex]-thresholdDay
           }
-          Data$syncDay[stateIndex] <- Data$day[stateIndex]-thresholdDay
         }
       }
-    }
-
-    # Flip axis and remove negative days
-    if (input$useCaseThreshold==T) {
-      removeIndex <- which(Data$syncDay>0)
-      Data <- Data[-removeIndex,]
-      Data$syncDay <- -1*Data$syncDay
-    }
-    Data$day <- -1*Data$day
-
-    # Right-align syncDay
-    if (input$rightAlign==T) {
+      
+      # Flip axis and remove negative days
       if (input$useCaseThreshold==T) {
-        maxSyncDay <- max(Data$syncDay)
-        for (State in unique(Data$state)) {
-          index <- which(Data$state==State)
-          maxStateSyncDay <- max(Data$syncDay[index])
-          adjustment <- maxSyncDay - maxStateSyncDay
-          Data$syncDay[index] <- Data$syncDay[index] + adjustment
-        }
-      } else {
-        maxDay <- max(Data$day)
-        for (State in unique(Data$state)) {
-          index <- which(Data$state==State)
-          maxStateDay <- max(Data$day[index])
-          adjustment <- maxDay - maxStateDay
-          Data$day[index] <- Data$day[index] + adjustment
+        removeIndex <- which(Data$syncDay>0)
+        Data <- Data[-removeIndex,]
+        Data$syncDay <- -1*Data$syncDay
+      }
+      Data$day <- -1*Data$day
+      
+      # Right-align syncDay
+      if (input$rightAlign==T) {
+        if (input$useCaseThreshold==T) {
+          maxSyncDay <- max(Data$syncDay)
+          for (State in unique(Data$state)) {
+            index <- which(Data$state==State)
+            maxStateSyncDay <- max(Data$syncDay[index])
+            adjustment <- maxSyncDay - maxStateSyncDay
+            Data$syncDay[index] <- Data$syncDay[index] + adjustment
+          }
+        } else {
+          maxDay <- max(Data$day)
+          for (State in unique(Data$state)) {
+            index <- which(Data$state==State)
+            maxStateDay <- max(Data$day[index])
+            adjustment <- maxDay - maxStateDay
+            Data$day[index] <- Data$day[index] + adjustment
+          }
         }
       }
     }
@@ -311,36 +331,38 @@ server <- function(input,output,session) {
     
     Data <- getData()
     
-    if (input$useCaseThreshold==T) {
-      X <- 'syncDay'
-      xLabel <- paste0('Days After Reaching ',input$caseThreshold,' Cases')
-    } else {
-      X <- 'day'
-      xLabel <- 'Days Since First Reported Case'
+    if (!is.null(Data)) {
+      if (input$useCaseThreshold==T) {
+        X <- 'syncDay'
+        xLabel <- paste0('Days After Reaching ',input$caseThreshold,' Cases')
+      } else {
+        X <- 'day'
+        xLabel <- 'Days Since First Reported Case'
+      }
+      
+      if (input$scaled=='Yes') {
+        Y <- paste0(input$statistic,'Scaled')
+        yLabel <- paste0(names(statistics)[which(statistics==input$statistic)],' (Scaled with Respect to ',input$popRef,')')
+        xLabel <- paste0(xLabel,' (Scaled with Respect to ',input$popRef,')')
+      } else {
+        Y <- input$statistic
+        yLabel <- names(statistics)[which(statistics==input$statistic)]
+      }
+      
+      if (input$logScale==T) {
+        yLabel <- paste0('Log Scaled ',yLabel)
+        p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10),label=state))
+      } else {
+        p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
+      }
+      p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
+                                                                    text=paste0(state,'<br>',
+                                                                                names(statistics[which(statistics==input$statistic)]),': ',round(get(Y),digits=0)))) +
+        theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
+      p <- ggplotly(p=p,tooltip = c('text')) %>%
+        layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
+      p
     }
-    
-    if (input$scaled=='Yes') {
-      Y <- paste0(input$statistic,'Scaled')
-      yLabel <- paste0(names(statistics)[which(statistics==input$statistic)],' (Scaled with Respect to ',input$popRef,')')
-      xLabel <- paste0(xLabel,' (Scaled with Respect to ',input$popRef,')')
-    } else {
-      Y <- input$statistic
-      yLabel <- names(statistics)[which(statistics==input$statistic)]
-    }
-    
-    if (input$logScale==T) {
-      yLabel <- paste0('Log Scaled ',yLabel)
-      p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10),label=state))
-    } else {
-      p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
-    }
-    p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
-                                                                  text=paste0(state,'<br>',
-                                                                              names(statistics[which(statistics==input$statistic)]),': ',get(Y)))) +
-      theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
-    p <- ggplotly(p=p,tooltip = c('text')) %>%
-      layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
-    p
   })
   
 }
