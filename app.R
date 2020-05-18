@@ -81,7 +81,7 @@ ui <- fluidPage(
     ),
     
     mainPanel(
-      plotlyOutput('plot',height = '600px')
+      plotlyOutput('plot',height = '700px')
     )
   )
   
@@ -328,8 +328,8 @@ server <- function(input,output,session) {
       p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
     }
     p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state)) +
-      theme_classic(base_size = 14) + theme(legend.position='top',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
-    p <- ggplotly(p=p,tooltip = 'label') %>%
+      theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
+    p <- ggplotly(p=p,tooltip = c('label','y')) %>%
       layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
     p
   })
