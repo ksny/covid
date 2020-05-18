@@ -308,12 +308,7 @@ server <- function(input,output,session) {
   })
   
   output$plot <- renderPlotly({
-    # req(input$states)
-    # req(input$counties)
-    # req(input$useCaseThreshold)
-    # req(input$rightAlign)
-    # req(input$statistic)
-    # req(input$scaled)
+    
     Data <- getData()
     
     if (input$useCaseThreshold==T) {
@@ -339,9 +334,11 @@ server <- function(input,output,session) {
     } else {
       p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
     }
-    p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state)) +
+    p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
+                                                                  text=paste0(state,'<br>',
+                                                                              names(statistics[which(statistics==input$statistic)]),': ',get(Y)))) +
       theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
-    p <- ggplotly(p=p,tooltip = c('label','y')) %>%
+    p <- ggplotly(p=p,tooltip = c('text')) %>%
       layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
     p
   })
