@@ -37,7 +37,7 @@ presetCounties <- c('')
 
 populationData <- readRDS('populationData.rds')
 
-statistics <- list('Cases'='cases','Deaths'='deaths','Change in Cases'='change','Percent Change in Cases'='percentChange')
+statistics <- list('Cases'='cases','Deaths'='deaths','Change in Cases'='change','Percent Change in Cases'='percentChange','Percent Death Rate'='deathRate')
 
 presets <- list('DC Metro Area'=list('States'=c('District of Columbia'),
                                      'Counties'=c('Montgomery (Maryland)',
@@ -212,7 +212,7 @@ server <- function(input,output,session) {
     if (input$scaled=='Yes') {
       updateSelectInput(session,'statistic',choices=statistics[1:3],selected=selection)
     } else {
-      updateSelectInput(session,'statistic',choices=statistics[1:4],selected=selection)
+      updateSelectInput(session,'statistic',choices=statistics[1:5],selected=selection)
     }
   })
   
@@ -242,6 +242,7 @@ server <- function(input,output,session) {
       countyData <- countyData[,-3]
       Data <- rbind(stateData[stateIndex,],countyData[countyIndex,])
       
+      Data$deathRate <- Data$cases
       Data$percentChange <- Data$cases
       Data$cumPercentChange <- Data$cases
       Data$change <- Data$cases
@@ -250,6 +251,7 @@ server <- function(input,output,session) {
       Data$changeScaled <- Data$cases
       Data$deathsScaled <- Data$deaths
       for (i in seq(nrow(Data))) {
+        Data$deathRate[i] <- Data$deaths[i]/Data$cases[i]*100
         State <- Data$state[i]
         stateIndex <- which(Data$state==State)
         if (values$popFlag==T) {
@@ -357,7 +359,7 @@ server <- function(input,output,session) {
       }
       p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
                                                                     text=paste0(state,'<br>',
-                                                                                names(statistics[which(statistics==input$statistic)]),': ',round(get(Y),digits=0)))) +
+                                                                                names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3)))) +
         theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
       p <- ggplotly(p=p,tooltip = c('text')) %>%
         layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
