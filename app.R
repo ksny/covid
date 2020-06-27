@@ -16,18 +16,19 @@ local <- F
 if (local==F) {
   stateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-states.csv',stringsAsFactors = F)
   countyData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-counties.csv',stringsAsFactors = F)
+  liveStateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/live/us-states.csv',stringsAsFactors = F)
+  liveCountyData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/live/us-counties.csv',stringsAsFactors = F)
   
   saveRDS(stateData,'stateData.rds')
   saveRDS(countyData,'countyData.rds')
+  saveRDS(liveStateData,'liveStateData.rds')
+  saveRDS(liveCountyData,'liveCountyData.rds')
 } else {
   stateData <- readRDS('stateData.rds')
   countyData <- readRDS('countyData.rds')
+  liveStateData <- readRDS('liveStateData.rds')
+  liveCountyData <- readRDS('liveCountyData.rds')
 }
-
-today <- max(as.Date(stateData$date))
-
-stateData$day <- as.Date(today)-as.Date(stateData$date)
-countyData$day <- as.Date(today) - as.Date(countyData$date)
 
 States <- sort(unique(stateData$state))
 Counties <- sort(unique(paste0(countyData$county,' (',countyData$state,')')))
@@ -63,6 +64,7 @@ values$popFlag <- T
 values$populationData <- populationData
 values$popEdit <- NULL
 values$scaled <- 'No'
+values$today <- NULL
 # values$stateData <- stateData
 # values$countyData <- countyData
 
@@ -73,6 +75,7 @@ ui <- fluidPage(
   sidebarLayout(
     
     sidebarPanel(width = 3,
+                 checkboxInput('live','Use Live Data?',value=F),
                  checkboxInput('usePresets','Use Preset State/County Selections?',value=F),
                  conditionalPanel(
                    condition='input.usePresets==true',
@@ -105,7 +108,8 @@ ui <- fluidPage(
                  ),
                  hr(),
                  h4('Last Updated:'),
-                 h5(today)
+                 # h5(today)
+                 uiOutput('today')
     ),
     
     mainPanel(
@@ -116,6 +120,10 @@ ui <- fluidPage(
 )
 
 server <- function(input,output,session) {
+  
+  output$today <- renderUI({
+    h5(values$today)
+  })
   
   observeEvent(input$presetGo,{
     selection <- presets[[which(names(presets)==input$presetSelection)]]
@@ -218,6 +226,39 @@ server <- function(input,output,session) {
   
   getData <- reactive({
     req(input$scaled)
+    if (input$live==T) {
+      liveStateData <- liveStateData[,1:5]
+      liveCountyData <- liveCountyData[,1:6]
+      for (State in unique(stateData$state)) {
+        stateIndex <- which(stateData$state==State)
+        liveStateIndex <- which(liveStateData$state==State)
+        if (max(stateData$date[stateIndex]) == max(liveStateData$date[liveStateIndex])) {
+          liveStateData <- liveStateData[-liveStateIndex,]
+        }
+        countyStateIndex <- which(countyData$state==State)
+        for (County in unique(countyData$county[countyStateIndex])) {
+          if (County %in% unique(liveCountyData$county[which(liveCountyData$state==State)])) {
+            countyIndex <- which((countyData$county==County)&(countyData$state==State))
+            liveCountyIndex <- which((liveCountyData$county==County)&(liveCountyData$state==State))
+            if (max(countyData$date[countyIndex]) == max(liveCountyData$date[liveCountyIndex])) {
+              liveCountyData <- liveCountyData[-liveCountyIndex,]
+            }
+          }
+        }
+      }
+      if (nrow(liveStateData)>0) {
+        stateData <- rbind(stateData,liveStateData)
+      }
+      if (nrow(liveCountyData)>0) {
+        countyData <- rbind(countyData,liveCountyData)
+      }
+    }
+    
+    values$today <- max(as.Date(stateData$date))
+    
+    stateData$day <- as.Date(values$today)-as.Date(stateData$date)
+    countyData$day <- as.Date(values$today) - as.Date(countyData$date)
+    
     if (((is.null(input$states))&(is.null(input$counties)))) {
       Data <- NULL
     } else {
@@ -293,6 +334,18 @@ server <- function(input,output,session) {
             }
             Data$syncDay[stateIndex] <- Data$day[stateIndex]-thresholdDay
           }
+        }
+      }
+      
+      if (input$statistic=='change') {
+        for (State in unique(Data$state)) {
+          stateIndex <- which(Data$state==State)
+          if (input$scaled=='Yes') {
+            thresholdDay <- max(Data$day[which((Data$state==State)&(Data$changeScaled>=input$caseThreshold))])
+          } else {
+            thresholdDay <- max(Data$day[which((Data$state==State)&(Data$change>=input$caseThreshold))])
+          }
+          Data$syncDay[stateIndex] <- Data$day[stateIndex]-thresholdDay
         }
       }
       
