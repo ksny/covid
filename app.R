@@ -38,7 +38,7 @@ presetCounties <- c('')
 
 populationData <- readRDS('populationData.rds')
 
-statistics <- list('Cases'='cases','Deaths'='deaths','Change in Cases'='change','Percent Change in Cases'='percentChange','Percent Death Rate'='deathRate')
+statistics <- list('Cases'='cases','Deaths'='deaths','New Cases per Day'='change','New Deaths per Day'='deathsChange','Percent Change in Cases'='percentChange','Death Rate (%)'='deathRate')
 
 presets <- list('DC Metro Area'=list('States'=c('District of Columbia'),
                                      'Counties'=c('Montgomery (Maryland)',
@@ -92,7 +92,7 @@ ui <- fluidPage(
                  checkboxInput('rightAlign','Match Days on Right?',value=F),
                  selectInput('statistic','Select Statistic to Plot:',statistics,selected = statistics[1]),
                  conditionalPanel(
-                   condition='input.statistic=="change"',
+                   condition="input.statistic=='change' || input.statistic=='percentChange' || input.statistic=='deathsChange'",
                    numericInput('lag','Number of Days for Running Average:',value=7,step=1)
                  ),
                  checkboxInput('logScale','Log Scale?',value=F),
@@ -134,7 +134,7 @@ server <- function(input,output,session) {
   })
   
   output$scaled <- renderUI({
-    if (input$statistic!='percentChange') {
+    if ((input$statistic!='percentChange')|(input$statistic!='deathRate')) {
       if (values$popFlag==T) {
         selectInput('scaled','Scale by Population Size?',c('No','Yes'),selected=values$scaled)
       }
@@ -218,9 +218,9 @@ server <- function(input,output,session) {
   observeEvent(input$scaled,{
     selection <- input$statistic
     if (input$scaled=='Yes') {
-      updateSelectInput(session,'statistic',choices=statistics[1:3],selected=selection)
+      updateSelectInput(session,'statistic',choices=statistics[1:4],selected=selection)
     } else {
-      updateSelectInput(session,'statistic',choices=statistics[1:5],selected=selection)
+      updateSelectInput(session,'statistic',choices=statistics[1:6],selected=selection)
     }
   })
   
@@ -287,10 +287,12 @@ server <- function(input,output,session) {
       Data$percentChange <- Data$cases
       Data$cumPercentChange <- Data$cases
       Data$change <- Data$cases
+      Data$deathsChange <- Data$deaths
       Data$syncDay <- Data$day
       Data$casesScaled <- Data$cases
       Data$changeScaled <- Data$cases
       Data$deathsScaled <- Data$deaths
+      Data$deathsChangeScaled <- Data$deaths
       for (i in seq(nrow(Data))) {
         Data$deathRate[i] <- Data$deaths[i]/Data$cases[i]*100
         State <- Data$state[i]
@@ -302,24 +304,32 @@ server <- function(input,output,session) {
         maxDay <- max(Data$day[which(Data$state==State)])
         maxDayChange <- max(Data$day[which(Data$state==State)])-input$lag+1
         if (Data$day[i] < maxDay) {
-          Data$percentChange[i] <- (Data$cases[i]-Data$cases[i-1])/Data$cases[i-1]*100
+          # Data$percentChange[i] <- (Data$cases[i]-Data$cases[i-1])/Data$cases[i-1]*100
           Data$cumPercentChange[i] <- Data$cumPercentChange[i-1] + Data$percentChange[i]
           if (Data$day[i] < maxDayChange) {
             Data$change[i] <- mean(Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])
+            Data$deathsChange[i] <- mean(Data$deaths[(i-input$lag+1):i] - Data$deaths[(i-input$lag):(i-1)])
+            Data$percentChange[i] <- mean((Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])/Data$cases[(i-input$lag):(i-1)])*100
             if (values$popFlag==T) {
               Data$changeScaled[i] <- mean(Data$casesScaled[(i-input$lag+1):i] - Data$casesScaled[(i-input$lag):(i-1)])
+              Data$deathsChangeScaled[i] <- mean(Data$deathsScaled[(i-input$lag+1):i] - Data$deathsScaled[(i-input$lag):(i-1)])
             }
           } else {
             Data$change[i] <- NA
+            Data$deathsChange[i] <- NA
+            Data$percentChange[i] <- NA
             if (values$popFlag==T) {
               Data$changeScaled[i] <- NA
+              Data$deathsChangeScaled[i] <- NA
             }
           }
         } else {
+          Data$deathsChange[i] <- NA
           Data$percentChange[i] <- NA
           Data$cumPercentChange[i] <- NA
           Data$change[i] <- NA
           Data$changeScaled[i] <- NA
+          Data$deathsChangeScaled[i] <- NA
           Data$day[stateIndex] <- Data$day[stateIndex] - maxDay
           if ((values$popFlag==T)&(input$scaled=='Yes')) {
             scaleFactor <- as.numeric(values$populationData$Population[popIndex])/as.numeric(values$populationData$Population[popRefIndex])
