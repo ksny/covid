@@ -347,7 +347,7 @@ server <- function(input,output,session) {
         }
       }
       
-      if (input$statistic=='change') {
+      if ((input$statistic=='change')|(input$statistic=='deathsChange')) {
         for (State in unique(Data$state)) {
           stateIndex <- which(Data$state==State)
           if (input$scaled=='Yes') {
