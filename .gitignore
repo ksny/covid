@@ -1,3 +1,7 @@
 rsconnect/*
 .RData
 .Rhistory
+liveStateData.rds
+liveCountyData.rds
+stateData.rds
+countyData.rds
