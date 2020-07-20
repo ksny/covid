@@ -94,9 +94,14 @@ ui <- fluidPage(
                    numericInput('caseThreshold','Case Threshold:',value=50)
                  ),
                  checkboxInput('rightAlign','Match Days on Right?',value=F),
+                 checkboxInput('doubleplot','Plot Two Plots',value=F),
                  selectInput('statistic','Select Statistic to Plot:',statistics,selected = statistics[1]),
                  conditionalPanel(
-                   condition="input.statistic=='change' || input.statistic=='percentChange' || input.statistic=='deathsChange'",
+                   condition = 'input.doubleplot==true',
+                   selectInput('statistic2','Select 2nd Statistic to Plot:',statistics,selected=statistics[2])
+                 ),
+                 conditionalPanel(
+                   condition="input.statistic=='change' || input.statistic=='percentChange' || input.statistic=='deathsChange' || input.statistic2=='change' || input.statistic2=='percentChange' || input.statistic2=='deathsChange'",
                    numericInput('lag','Number of Days for Running Average:',value=7,step=1)
                  ),
                  checkboxInput('logScale','Log Scale?',value=F),
@@ -117,7 +122,16 @@ ui <- fluidPage(
     ),
     
     mainPanel(
-      plotlyOutput('plot',height = '700px')
+      conditionalPanel(
+        condition = 'input.doubleplot==false',
+        plotlyOutput('plot',height = '700px')
+      ),
+      conditionalPanel(
+        condition = 'input.doubleplot==true',
+        plotlyOutput('plot1',height = '350px'),
+        hr(),
+        plotlyOutput('plot2',height = '350px')
+      )
     )
   )
   
@@ -138,7 +152,7 @@ server <- function(input,output,session) {
   })
   
   output$scaled <- renderUI({
-    if ((input$statistic!='percentChange')|(input$statistic!='deathRate')) {
+    if ((input$statistic!='percentChange')|(input$statistic!='deathRate')|(input$statistic2!='percentChange')|(input$statistic2!='deathRate')) {
       if (values$popFlag==T) {
         selectInput('scaled','Scale by Population Size?',c('No','Yes'),selected=values$scaled)
       }
@@ -221,10 +235,13 @@ server <- function(input,output,session) {
   
   observeEvent(input$scaled,{
     selection <- input$statistic
+    selection2 <- input$statistic2
     if (input$scaled=='Yes') {
       updateSelectInput(session,'statistic',choices=statistics[1:4],selected=selection)
+      updateSelectInput(session,'statistic2',choices=statistics[1:4],selected=selection2)
     } else {
       updateSelectInput(session,'statistic',choices=statistics[1:6],selected=selection)
+      updateSelectInput(session,'statistic2',choices=statistics[1:6],selected=selection2)
     }
   })
   
@@ -351,7 +368,7 @@ server <- function(input,output,session) {
         }
       }
       
-      if ((input$statistic=='change')|(input$statistic=='deathsChange')) {
+      if ((input$statistic=='change')|(input$statistic=='deathsChange')|(input$statistic2=='change')|(input$statistic2=='deathsChange')) {
         for (State in unique(Data$state)) {
           stateIndex <- which(Data$state==State)
           if (input$scaled=='Yes') {
@@ -427,6 +444,82 @@ server <- function(input,output,session) {
       p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
                                                                     text=paste0(state,'<br>',
                                                                                 names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3)))) +
+        theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
+      p <- ggplotly(p=p,tooltip = c('text')) %>%
+        layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
+      p
+    }
+  })
+  
+  output$plot1 <- renderPlotly({
+    
+    Data <- getData()
+    
+    if (!is.null(Data)) {
+      if (input$useCaseThreshold==T) {
+        X <- 'syncDay'
+        xLabel <- paste0('Days After Reaching ',input$caseThreshold,' Cases')
+      } else {
+        X <- 'day'
+        xLabel <- 'Days Since First Reported Case'
+      }
+      
+      if (input$scaled=='Yes') {
+        Y <- paste0(input$statistic,'Scaled')
+        yLabel <- paste0(names(statistics)[which(statistics==input$statistic)],' (Scaled with Respect to ',input$popRef,')')
+        xLabel <- paste0(xLabel,' (Scaled with Respect to ',input$popRef,')')
+      } else {
+        Y <- input$statistic
+        yLabel <- names(statistics)[which(statistics==input$statistic)]
+      }
+      
+      if (input$logScale==T) {
+        yLabel <- paste0('Log Scaled ',yLabel)
+        p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10),label=state))
+      } else {
+        p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
+      }
+      p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
+                                                                    text=paste0(state,'<br>',
+                                                                                names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3)))) +
+        theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
+      p <- ggplotly(p=p,tooltip = c('text')) %>%
+        layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
+      p
+    }
+  })
+  
+  output$plot2 <- renderPlotly({
+    
+    Data <- getData()
+    
+    if (!is.null(Data)) {
+      if (input$useCaseThreshold==T) {
+        X <- 'syncDay'
+        xLabel <- paste0('Days After Reaching ',input$caseThreshold,' Cases')
+      } else {
+        X <- 'day'
+        xLabel <- 'Days Since First Reported Case'
+      }
+      
+      if (input$scaled=='Yes') {
+        Y <- paste0(input$statistic2,'Scaled')
+        yLabel <- paste0(names(statistics)[which(statistics==input$statistic2)],' (Scaled with Respect to ',input$popRef,')')
+        xLabel <- paste0(xLabel,' (Scaled with Respect to ',input$popRef,')')
+      } else {
+        Y <- input$statistic2
+        yLabel <- names(statistics)[which(statistics==input$statistic2)]
+      }
+      
+      if (input$logScale==T) {
+        yLabel <- paste0('Log Scaled ',yLabel)
+        p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10),label=state))
+      } else {
+        p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
+      }
+      p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
+                                                                    text=paste0(state,'<br>',
+                                                                                names(statistics[which(statistics==input$statistic2)]),': ',signif(get(Y),digits=3)))) +
         theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
       p <- ggplotly(p=p,tooltip = c('text')) %>%
         layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
