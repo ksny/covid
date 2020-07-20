@@ -54,6 +54,10 @@ presets <- list('DC Metro Area'=list('States'=c('District of Columbia'),
                                                   'Prince William (Virginia)')),
                 'Family States'=list('States'=c('New Jersey','Maryland','Texas','Pennsylvania'),
                                      'Counties'=''),
+                'Sun Belt'=list('States'=c('California','Arizona','New Mexico','Texas','Louisiana','Mississsippi',
+                                           'Alabama','Florida','Georgia','South Carolina','North Carolina','Virginia',
+                                           'Maryland'),
+                                'Counties'=''),
                 'All States'=list('States'=States,
                                   'Counties'=''))
 
