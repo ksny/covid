@@ -118,13 +118,13 @@ ui <- fluidPage(
     ),
     
     mainPanel(
-      # conditionalPanel(
-      #   condition = 'input.doubleplot==false',
-      #   plotlyOutput('plot',height = '700px')
-      # ),
+      conditionalPanel(
+        condition = 'input.doubleplot==false',
+        plotlyOutput('plot',height = '700px')
+      ),
       conditionalPanel(
         condition = 'input.doubleplot==true',
-        plotlyOutput('plot',height = '350px'),
+        plotlyOutput('plot1',height = '350px'),
         hr(),
         plotlyOutput('plot2',height = '350px')
       )
@@ -410,6 +410,44 @@ server <- function(input,output,session) {
   })
   
   output$plot <- renderPlotly({
+    
+    Data <- getData()
+    
+    if (!is.null(Data)) {
+      if (input$useCaseThreshold==T) {
+        X <- 'syncDay'
+        xLabel <- paste0('Days After Reaching ',input$caseThreshold,' Cases')
+      } else {
+        X <- 'day'
+        xLabel <- 'Days Since First Reported Case'
+      }
+      
+      if (input$scaled=='Yes') {
+        Y <- paste0(input$statistic,'Scaled')
+        yLabel <- paste0(names(statistics)[which(statistics==input$statistic)],' (Scaled with Respect to ',input$popRef,')')
+        xLabel <- paste0(xLabel,' (Scaled with Respect to ',input$popRef,')')
+      } else {
+        Y <- input$statistic
+        yLabel <- names(statistics)[which(statistics==input$statistic)]
+      }
+      
+      if (input$logScale==T) {
+        yLabel <- paste0('Log Scaled ',yLabel)
+        p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10),label=state))
+      } else {
+        p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
+      }
+      p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
+                                                                    text=paste0(state,'<br>',
+                                                                                names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3)))) +
+        theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
+      p <- ggplotly(p=p,tooltip = c('text')) %>%
+        layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
+      p
+    }
+  })
+  
+  output$plot1 <- renderPlotly({
     
     Data <- getData()
     
