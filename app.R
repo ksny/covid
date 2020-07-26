@@ -38,7 +38,7 @@ presetCounties <- c('')
 
 populationData <- readRDS('populationData.rds')
 
-statistics <- list('Cases'='cases','Deaths'='deaths','New Cases per Day'='change','New Deaths per Day'='deathsChange','Percent Change in Cases'='percentChange','Death Rate (%)'='deathRate')
+statistics <- list('Cases'='cases','Deaths'='deaths','New Cases per Day'='change','New Deaths per Day'='deathsChange','Percent Change in Cases'='percentChange','Death Rate (%)'='deathRate','Local Death Rate (%)'='deathRateLocal')
 
 presets <- list('DC Metro Area'=list('States'=c('District of Columbia'),
                                      'Counties'=c('Montgomery (Maryland)',
@@ -66,7 +66,7 @@ values <- reactiveValues()
 values$state <- NULL
 values$popFlag <- T
 values$populationData <- populationData
-values$popEdit <- NULL
+# values$popEdit <- NULL
 values$scaled <- 'No'
 values$today <- NULL
 # values$stateData <- stateData
@@ -94,15 +94,24 @@ ui <- fluidPage(
                    numericInput('caseThreshold','Case Threshold:',value=50)
                  ),
                  checkboxInput('rightAlign','Match Days on Right?',value=F),
+                 checkboxInput('doubleaxis','Plot Second Axis',value=F),
                  checkboxInput('doubleplot','Plot Two Plots',value=F),
                  selectInput('statistic','Select Statistic to Plot:',statistics,selected = statistics[1]),
+                 conditionalPanel(
+                   condition = 'input.doubleaxis==true',
+                   selectInput('statistic1','Select Statistic to Plot on Second Axis:',statistics,selected=statistics[2])
+                 ),
                  conditionalPanel(
                    condition = 'input.doubleplot==true',
                    selectInput('statistic2','Select 2nd Statistic to Plot:',statistics,selected=statistics[2])
                  ),
                  conditionalPanel(
-                   condition="input.statistic=='change' || input.statistic=='percentChange' || input.statistic=='deathsChange' || input.statistic2=='change' || input.statistic2=='percentChange' || input.statistic2=='deathsChange'",
+                   condition="input.statistic=='change' || input.statistic=='percentChange' || input.statistic=='deathsChange' || input.statistic=='deathRateLocal' || input.statistic2=='change' || input.statistic2=='percentChange' || input.statistic2=='deathsChange' || input.statistic2=='deathRateLocal'",
                    numericInput('lag','Number of Days for Running Average:',value=7,step=1)
+                 ),
+                 conditionalPanel(
+                   condition='input.statistic=="deathRate" || input.statistic=="deathRateLocal" || input.statistic2=="deathRate" || input.statistic2=="deathRateLocal"',
+                   numericInput('shift','Days after Case to Count Death:',value=14,step=1)
                  ),
                  checkboxInput('logScale','Log Scale?',value=F),
                  uiOutput('scaled'),
@@ -152,7 +161,7 @@ server <- function(input,output,session) {
   })
   
   output$scaled <- renderUI({
-    if ((input$statistic!='percentChange')|(input$statistic!='deathRate')|(input$statistic2!='percentChange')|(input$statistic2!='deathRate')) {
+    if ((input$statistic!='percentChange')|(input$statistic!='deathRate')|(input$statistic!='deathRateLocal')|(input$statistic2!='percentChange')|(input$statistic2!='deathRate')|(input$statistic2!='deathRateLocal')) {
       if (values$popFlag==T) {
         selectInput('scaled','Scale by Population Size?',c('No','Yes'),selected=values$scaled)
       }
@@ -180,8 +189,9 @@ server <- function(input,output,session) {
   
   observeEvent(input$popRef,{
     index <- which(values$populationData$State==input$popRef)
-    values$popEdit <- as.numeric(values$populationData$Population)[index]
-    updateNumericInput(session,'popEdit',value=values$popEdit)
+    indexValue <- as.numeric(values$populationDat$Population)[index]
+    # values$popEdit <- as.numeric(values$populationData$Population)[index]
+    updateNumericInput(session,'popEdit',value=indexValue)
   })
   
   observe({
@@ -189,8 +199,10 @@ server <- function(input,output,session) {
     if (values$popFlag==T) {
       if (input$editPop==T) {
         index <- which(values$populationData$State==input$popRef)
-        values$popEdit <- as.numeric(input$popEdit)
-        values$populationData$Population[index] <- values$popEdit
+        # values$popEdit <- as.numeric(input$popEdit)
+        indexValue <- as.numeric(input$popEdit)
+        values$populationData$Population[index] <- indexValue
+        saveRDS(values$populationData,'populationData.rds')
       }
     }
   })
@@ -220,6 +232,13 @@ server <- function(input,output,session) {
     removeModal()
   })
   
+  # observe({
+  #   input$popEdit
+  #   index <- which(values$populationData$State==input$popRef)
+  #   values$populationData$Population[index] <- input$popEdit
+  #   saveRDS(values$populationData,'populationData.rds')
+  # })
+  
   observe({
     values$popFlag <- T
     input$states
@@ -240,9 +259,13 @@ server <- function(input,output,session) {
       updateSelectInput(session,'statistic',choices=statistics[1:4],selected=selection)
       updateSelectInput(session,'statistic2',choices=statistics[1:4],selected=selection2)
     } else {
-      updateSelectInput(session,'statistic',choices=statistics[1:6],selected=selection)
-      updateSelectInput(session,'statistic2',choices=statistics[1:6],selected=selection2)
+      updateSelectInput(session,'statistic',choices=statistics,selected=selection)
+      updateSelectInput(session,'statistic2',choices=statistics,selected=selection2)
     }
+    popStates <- values$populationData$State
+    popCounties <- Counties[which(Counties %in% popStates)]
+    selectedCounties <- input$counties
+    # updateSelectizeInput(session,'counties',choices=popCounties,selected=selectedCounties)
   })
   
   getData <- reactive({
@@ -305,6 +328,7 @@ server <- function(input,output,session) {
       Data <- rbind(stateData[stateIndex,],countyData[countyIndex,])
       
       Data$deathRate <- Data$cases
+      Data$deathRateLocal <- Data$cases
       Data$percentChange <- Data$cases
       Data$cumPercentChange <- Data$cases
       Data$change <- Data$cases
@@ -315,7 +339,7 @@ server <- function(input,output,session) {
       Data$deathsScaled <- Data$deaths
       Data$deathsChangeScaled <- Data$deaths
       for (i in seq(nrow(Data))) {
-        Data$deathRate[i] <- Data$deaths[i]/Data$cases[i]*100
+        # Data$deathRate[i] <- Data$deaths[i]/Data$cases[i]*100
         State <- Data$state[i]
         stateIndex <- which(Data$state==State)
         if (values$popFlag==T) {
@@ -325,20 +349,32 @@ server <- function(input,output,session) {
         maxDay <- max(Data$day[which(Data$state==State)])
         maxDayChange <- max(Data$day[which(Data$state==State)])-input$lag+1
         if (Data$day[i] < maxDay) {
+          if (Data$day[i] < (maxDay-input$shift)) {
+            Data$deathRate[i] <- Data$deaths[i]/Data$cases[(i-input$shift)]*100
+          } else {
+            Data$deathRate[i] <- NA
+          }
           # Data$percentChange[i] <- (Data$cases[i]-Data$cases[i-1])/Data$cases[i-1]*100
           Data$cumPercentChange[i] <- Data$cumPercentChange[i-1] + Data$percentChange[i]
           if (Data$day[i] < maxDayChange) {
             Data$change[i] <- mean(Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])
             Data$deathsChange[i] <- mean(Data$deaths[(i-input$lag+1):i] - Data$deaths[(i-input$lag):(i-1)])
             Data$percentChange[i] <- mean((Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])/Data$cases[(i-input$lag):(i-1)])*100
+            if (Data$day[i] < (maxDayChange-input$shift)) {
+              Data$deathRateLocal[i] <- mean(Data$deathsChange[(i-input$lag+1):i]/Data$change[((i-input$shift)-input$lag+1):(i-input$shift)])*100
+            } else {
+              Data$deathRateLocal[i] <- NA
+            }
             if (values$popFlag==T) {
               Data$changeScaled[i] <- mean(Data$casesScaled[(i-input$lag+1):i] - Data$casesScaled[(i-input$lag):(i-1)])
               Data$deathsChangeScaled[i] <- mean(Data$deathsScaled[(i-input$lag+1):i] - Data$deathsScaled[(i-input$lag):(i-1)])
             }
           } else {
+            Data$deathRate[i] <- NA
             Data$change[i] <- NA
             Data$deathsChange[i] <- NA
             Data$percentChange[i] <- NA
+            Data$deathRateLocal[i] <- NA
             if (values$popFlag==T) {
               Data$changeScaled[i] <- NA
               Data$deathsChangeScaled[i] <- NA
@@ -352,7 +388,7 @@ server <- function(input,output,session) {
           Data$changeScaled[i] <- NA
           Data$deathsChangeScaled[i] <- NA
           Data$day[stateIndex] <- Data$day[stateIndex] - maxDay
-          if ((values$popFlag==T)&(input$scaled=='Yes')) {
+          if ((values$popFlag==T)&(input$scaled=='Yes')&(length(popRefIndex)>0)) {
             scaleFactor <- as.numeric(values$populationData$Population[popIndex])/as.numeric(values$populationData$Population[popRefIndex])
             Data$casesScaled[stateIndex] <- Data$cases[stateIndex]/scaleFactor
             Data$deathsScaled[stateIndex] <- Data$deaths[stateIndex]/scaleFactor
@@ -416,7 +452,7 @@ server <- function(input,output,session) {
   output$plot <- renderPlotly({
     
     Data <- getData()
-    
+
     if (!is.null(Data)) {
       if (input$useCaseThreshold==T) {
         X <- 'syncDay'
@@ -429,14 +465,25 @@ server <- function(input,output,session) {
       if (input$scaled=='Yes') {
         Y <- paste0(input$statistic,'Scaled')
         yLabel <- paste0(names(statistics)[which(statistics==input$statistic)],' (Scaled with Respect to ',input$popRef,')')
+        if (input$doubleaxis==T) {
+          Y1 <- paste0(input$statistic1,'Scaled')
+          y1Label <- paste0(names(statistics)[which(statistics==input$statistic1)],' Scaled with Respect to ',input$popRef,')')
+        }
         xLabel <- paste0(xLabel,' (Scaled with Respect to ',input$popRef,')')
       } else {
         Y <- input$statistic
         yLabel <- names(statistics)[which(statistics==input$statistic)]
+        if (input$doubleaxis==T) {
+          Y1 <- input$statistic1
+          y1Label <- names(statistics)[which(statistics==input$statistic1)]
+        }
       }
       
       if (input$logScale==T) {
         yLabel <- paste0('Log Scaled ',yLabel)
+        if (input$doubleaxis==T) {
+          y1Label <- paste0('Log Scaled ',y1Label)
+        }
         p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10),label=state))
       } else {
         p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
@@ -445,6 +492,21 @@ server <- function(input,output,session) {
                                                                     text=paste0(state,'<br>',
                                                                                 names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3)))) +
         theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
+      if (input$doubleaxis==T) {
+        if (input$logScale==T) {
+          secAxisScale <- max(log(Data[[Y1]],10),na.rm=T)/max(log(Data[[Y]],10),na.rm=T)
+          p <-  p + geom_line(aes(y=log(get(Y1),10)/secAxisScale,color=state),size=1) + geom_point(aes(y=log(get(Y1),10)/secAxisScale,color=state,
+                                                                        text=paste0(state,'<br>',
+                                                                                    names(statistics[which(statistics==input$statistic1)]),': ',signif(log(get(Y1),10),digits=3))))
+        } else {
+          secAxisScale <- max(Data[[Y1]],na.rm=T)/max(Data[[Y]],na.rm=T)
+          p <-  p + geom_line(aes(y=get(Y1)/secAxisScale,color=state),size=1) + geom_point(aes(y=get(Y1)/secAxisScale,color=state,
+                                                                        text=paste0(state,'<br>',
+                                                                                    names(statistics[which(statistics==input$statistic1)]),': ',signif(get(Y1),digits=3))))
+        }
+        print(secAxisScale)
+        # p <- p + scale_y_continuous(sec.axis = sec_axis(~.*secAxisScale, name = y1Label))
+      }
       p <- ggplotly(p=p,tooltip = c('text')) %>%
         layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
       p
