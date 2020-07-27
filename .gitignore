@@ -5,3 +5,5 @@ liveStateData.rds
 liveCountyData.rds
 stateData.rds
 countyData.rds
+usData.rds
+liveUsData.rds
