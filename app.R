@@ -357,13 +357,15 @@ server <- function(input,output,session) {
           # Data$percentChange[i] <- (Data$cases[i]-Data$cases[i-1])/Data$cases[i-1]*100
           Data$cumPercentChange[i] <- Data$cumPercentChange[i-1] + Data$percentChange[i]
           if (Data$day[i] < maxDayChange) {
-            Data$change[i] <- mean(Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])
+            # Data$change[i] <- mean(Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])
             Data$deathsChange[i] <- mean(Data$deaths[(i-input$lag+1):i] - Data$deaths[(i-input$lag):(i-1)])
             Data$percentChange[i] <- mean((Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])/Data$cases[(i-input$lag):(i-1)])*100
             if (Data$day[i] < (maxDayChange-input$shift)) {
               Data$deathRateLocal[i] <- mean(Data$deathsChange[(i-input$lag+1):i]/Data$change[((i-input$shift)-input$lag+1):(i-input$shift)])*100
+              Data$change[i] <- mean(Data$cases[((i-input$shift)-input$lag+1):i] - Data$cases[((i-input$shift)-input$lag):(i-1)])
             } else {
               Data$deathRateLocal[i] <- NA
+              Data$change[i] <- NA
             }
             if (values$popFlag==T) {
               Data$changeScaled[i] <- mean(Data$casesScaled[(i-input$lag+1):i] - Data$casesScaled[(i-input$lag):(i-1)])
@@ -529,14 +531,25 @@ server <- function(input,output,session) {
       if (input$scaled=='Yes') {
         Y <- paste0(input$statistic,'Scaled')
         yLabel <- paste0(names(statistics)[which(statistics==input$statistic)],' (Scaled with Respect to ',input$popRef,')')
+        if (input$doubleaxis==T) {
+          Y1 <- paste0(input$statistic1,'Scaled')
+          y1Label <- paste0(names(statistics)[which(statistics==input$statistic1)],' Scaled with Respect to ',input$popRef,')')
+        }
         xLabel <- paste0(xLabel,' (Scaled with Respect to ',input$popRef,')')
       } else {
         Y <- input$statistic
         yLabel <- names(statistics)[which(statistics==input$statistic)]
+        if (input$doubleaxis==T) {
+          Y1 <- input$statistic1
+          y1Label <- names(statistics)[which(statistics==input$statistic1)]
+        }
       }
       
       if (input$logScale==T) {
         yLabel <- paste0('Log Scaled ',yLabel)
+        if (input$doubleaxis==T) {
+          y1Label <- paste0('Log Scaled ',y1Label)
+        }
         p <- ggplot(Data,aes(x=get(X),y=log(get(Y),10),label=state))
       } else {
         p <- ggplot(Data,aes(x=get(X),y=get(Y),label=state))
@@ -545,6 +558,21 @@ server <- function(input,output,session) {
                                                                     text=paste0(state,'<br>',
                                                                                 names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3)))) +
         theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
+      if (input$doubleaxis==T) {
+        if (input$logScale==T) {
+          secAxisScale <- max(log(Data[[Y1]],10),na.rm=T)/max(log(Data[[Y]],10),na.rm=T)
+          p <-  p + geom_line(aes(y=log(get(Y1),10)/secAxisScale,color=state),size=1) + geom_point(aes(y=log(get(Y1),10)/secAxisScale,color=state,
+                                                                                                       text=paste0(state,'<br>',
+                                                                                                                   names(statistics[which(statistics==input$statistic1)]),': ',signif(log(get(Y1),10),digits=3))))
+        } else {
+          secAxisScale <- max(Data[[Y1]],na.rm=T)/max(Data[[Y]],na.rm=T)
+          p <-  p + geom_line(aes(y=get(Y1)/secAxisScale,color=state),size=1) + geom_point(aes(y=get(Y1)/secAxisScale,color=state,
+                                                                                               text=paste0(state,'<br>',
+                                                                                                           names(statistics[which(statistics==input$statistic1)]),': ',signif(get(Y1),digits=3))))
+        }
+        print(secAxisScale)
+        # p <- p + scale_y_continuous(sec.axis = sec_axis(~.*secAxisScale, name = y1Label))
+      }
       p <- ggplotly(p=p,tooltip = c('text')) %>%
         layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
       p
