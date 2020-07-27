@@ -14,24 +14,38 @@ library(plotly)
 local <- F
 
 if (local==F) {
+  usData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us.csv',stringsAsFactors = F)
   stateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-states.csv',stringsAsFactors = F)
   countyData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/us-counties.csv',stringsAsFactors = F)
+  liveUsData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/live/us.csv',stringsAsFactors = F)
   liveStateData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/live/us-states.csv',stringsAsFactors = F)
   liveCountyData <- read.csv('https://github.com/nytimes/covid-19-data/raw/master/live/us-counties.csv',stringsAsFactors = F)
   
+  saveRDS(usData,'usData.rds')
   saveRDS(stateData,'stateData.rds')
   saveRDS(countyData,'countyData.rds')
+  saveRDS(liveUsData,'liveUsData.rds')
   saveRDS(liveStateData,'liveStateData.rds')
   saveRDS(liveCountyData,'liveCountyData.rds')
 } else {
+  usData <- readRDS('usData.rds')
   stateData <- readRDS('stateData.rds')
   countyData <- readRDS('countyData.rds')
+  liveUsData <- readRDS('liveUsData.rds')
   liveStateData <- readRDS('liveStateData.rds')
   liveCountyData <- readRDS('liveCountyData.rds')
 }
 
-States <- sort(unique(stateData$state))
+States <- c('United States',sort(unique(stateData$state)))
 Counties <- sort(unique(paste0(countyData$county,' (',countyData$state,')')))
+
+usData$state <- 'United States'
+usData$fips <- NA
+stateData <- rbind(stateData,usData)
+
+liveUsData$state <- 'United States'
+liveUsData$fips <- NA
+liveStateData <- rbind(liveStateData,liveUsData)
 
 presetStates <- c('')
 presetCounties <- c('')
@@ -110,7 +124,7 @@ ui <- fluidPage(
                    numericInput('lag','Number of Days for Running Average:',value=7,step=1)
                  ),
                  conditionalPanel(
-                   condition='input.statistic=="deathRate" || input.statistic=="deathRateLocal" || input.statistic2=="deathRate" || input.statistic2=="deathRateLocal"',
+                   condition='input.statistic=="change" || input.statistic=="deathRate" || input.statistic=="deathRateLocal" || input.statistic2=="change" || input.statistic2=="deathRate" || input.statistic2=="deathRateLocal"',
                    numericInput('shift','Days after Case to Count Death:',value=14,step=1)
                  ),
                  checkboxInput('logScale','Log Scale?',value=F),
