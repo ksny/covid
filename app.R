@@ -375,14 +375,18 @@ server <- function(input,output,session) {
             Data$deathsChange[i] <- mean(Data$deaths[(i-input$lag+1):i] - Data$deaths[(i-input$lag):(i-1)])
             Data$percentChange[i] <- mean((Data$cases[(i-input$lag+1):i] - Data$cases[(i-input$lag):(i-1)])/Data$cases[(i-input$lag):(i-1)])*100
             if (Data$day[i] < (maxDayChange-input$shift)) {
-              Data$deathRateLocal[i] <- mean(Data$deathsChange[(i-input$lag+1):i]/Data$change[((i-input$shift)-input$lag+1):(i-input$shift)])*100
-              Data$change[i] <- mean(Data$cases[((i-input$shift)-input$lag+1):i] - Data$cases[((i-input$shift)-input$lag):(i-1)])
+              Data$change[i] <- mean(Data$cases[((i-input$shift)-input$lag+1):(i-input$shift)] - Data$cases[((i-input$shift)-input$lag):((i-input$shift)-1)])
+              Data$deathRateLocal[i] <- mean(Data$deathsChange[(i-input$lag+1):i]/Data$change[((i)-input$lag+1):(i)])*100
             } else {
               Data$deathRateLocal[i] <- NA
               Data$change[i] <- NA
             }
             if (values$popFlag==T) {
-              Data$changeScaled[i] <- mean(Data$casesScaled[(i-input$lag+1):i] - Data$casesScaled[(i-input$lag):(i-1)])
+              if (Data$day[i] < (maxDayChange-input$shift)) {
+                Data$changeScaled[i] <- mean(Data$casesScaled[((i-input$shift)-input$lag+1):(i-input$shift)] - Data$casesScaled[((i-input$shift)-input$lag):((i-input$shift)-1)])
+              } else {
+                Data$changeScaled[i] <- NA
+              }
               Data$deathsChangeScaled[i] <- mean(Data$deathsScaled[(i-input$lag+1):i] - Data$deathsScaled[(i-input$lag):(i-1)])
             }
           } else {
@@ -506,21 +510,24 @@ server <- function(input,output,session) {
       }
       p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
                                                                     text=paste0(state,'<br>',
-                                                                                names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3)))) +
+                                                                                names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3),'<br>',
+                                                                                'Day: ',get(X)))) +
         theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
       if (input$doubleaxis==T) {
         if (input$logScale==T) {
           secAxisScale <- max(log(Data[[Y1]],10),na.rm=T)/max(log(Data[[Y]],10),na.rm=T)
           p <-  p + geom_line(aes(y=log(get(Y1),10)/secAxisScale,color=state),size=1) + geom_point(aes(y=log(get(Y1),10)/secAxisScale,color=state,
                                                                         text=paste0(state,'<br>',
-                                                                                    names(statistics[which(statistics==input$statistic1)]),': ',signif(log(get(Y1),10),digits=3))))
+                                                                                    names(statistics[which(statistics==input$statistic1)]),': ',signif(log(get(Y1),10),digits=3),'<br>',
+                                                                                    'Day: ',get(X))))
         } else {
           secAxisScale <- max(Data[[Y1]],na.rm=T)/max(Data[[Y]],na.rm=T)
           p <-  p + geom_line(aes(y=get(Y1)/secAxisScale,color=state),size=1) + geom_point(aes(y=get(Y1)/secAxisScale,color=state,
                                                                         text=paste0(state,'<br>',
-                                                                                    names(statistics[which(statistics==input$statistic1)]),': ',signif(get(Y1),digits=3))))
+                                                                                    names(statistics[which(statistics==input$statistic1)]),': ',signif(get(Y1),digits=3),'<br>',
+                                                                                    'Day: ',get(X))))
         }
-        print(secAxisScale)
+        # print(secAxisScale)
         # p <- p + scale_y_continuous(sec.axis = sec_axis(~.*secAxisScale, name = y1Label))
       }
       p <- ggplotly(p=p,tooltip = c('text')) %>%
@@ -570,21 +577,24 @@ server <- function(input,output,session) {
       }
       p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
                                                                     text=paste0(state,'<br>',
-                                                                                names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3)))) +
+                                                                                names(statistics[which(statistics==input$statistic)]),': ',signif(get(Y),digits=3),'<br>',
+                                                                                'Day: ',get(X)))) +
         theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
       if (input$doubleaxis==T) {
         if (input$logScale==T) {
           secAxisScale <- max(log(Data[[Y1]],10),na.rm=T)/max(log(Data[[Y]],10),na.rm=T)
           p <-  p + geom_line(aes(y=log(get(Y1),10)/secAxisScale,color=state),size=1) + geom_point(aes(y=log(get(Y1),10)/secAxisScale,color=state,
                                                                                                        text=paste0(state,'<br>',
-                                                                                                                   names(statistics[which(statistics==input$statistic1)]),': ',signif(log(get(Y1),10),digits=3))))
+                                                                                                                   names(statistics[which(statistics==input$statistic1)]),': ',signif(log(get(Y1),10),digits=3),'<br>',
+                                                                                                                   'Day: ',get(X))))
         } else {
           secAxisScale <- max(Data[[Y1]],na.rm=T)/max(Data[[Y]],na.rm=T)
           p <-  p + geom_line(aes(y=get(Y1)/secAxisScale,color=state),size=1) + geom_point(aes(y=get(Y1)/secAxisScale,color=state,
                                                                                                text=paste0(state,'<br>',
-                                                                                                           names(statistics[which(statistics==input$statistic1)]),': ',signif(get(Y1),digits=3))))
+                                                                                                           names(statistics[which(statistics==input$statistic1)]),': ',signif(get(Y1),digits=3),'<br>',
+                                                                                                           'Day: ',get(X))))
         }
-        print(secAxisScale)
+        # print(secAxisScale)
         # p <- p + scale_y_continuous(sec.axis = sec_axis(~.*secAxisScale, name = y1Label))
       }
       p <- ggplotly(p=p,tooltip = c('text')) %>%
@@ -623,7 +633,8 @@ server <- function(input,output,session) {
       }
       p <-  p + geom_line(aes(color=state),size=1) + geom_point(aes(color=state,
                                                                     text=paste0(state,'<br>',
-                                                                                names(statistics[which(statistics==input$statistic2)]),': ',signif(get(Y),digits=3)))) +
+                                                                                names(statistics[which(statistics==input$statistic2)]),': ',signif(get(Y),digits=3),'<br>',
+                                                                                'Day: ',get(X)))) +
         theme_classic(base_size = 14) + theme(legend.position='none',legend.title=element_blank()) + labs(title='',x=xLabel,y=yLabel)
       p <- ggplotly(p=p,tooltip = c('text')) %>%
         layout(legend = list(orientation = "h", x = 0.4, y = -0.2))
